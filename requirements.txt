@@ -1,11 +1,11 @@
-discord.py
+openai>=1.3.0
 google-auth
 google-auth-oauthlib
-google-auth-httplib2
 google-api-python-client
+flask==2.3.3
+discord.py==2.3.2
+numpy
 pytz
-aiohttp
 sentence-transformers
 scikit-learn
-numpy
-openai
+aiohttp

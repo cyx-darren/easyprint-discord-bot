@@ -1,7 +1,24 @@
-[project]
-name = "python-template"
+[tool.poetry]
+name = "freshdesk-discord-bot"
 version = "0.1.0"
 description = ""
-authors = ["Your Name <you@example.com>"]
-requires-python = ">=3.11"
-dependencies = []
+authors = ["Your Name"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+google-auth = "^2.36.0"
+google-auth-oauthlib = "^1.0.0"
+google-api-python-client = "^2.97.0"
+flask = "2.3.3"
+"discord.py" = "2.3.2"
+openai = "^1.54.3"
+pytz = "^2023.3"
+sentence-transformers = "^2.2.2"
+scikit-learn = "^1.5.2"
+numpy = "^2.1.3"
+aiohttp = "^3.8.5"
+torch = "^2.5.1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

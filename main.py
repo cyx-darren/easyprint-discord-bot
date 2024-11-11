@@ -1,3 +1,6 @@
+#!/usr/bin/env python3
+# Rest of your existing main.py code follows...
+
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
 from datetime import datetime
@@ -16,6 +19,27 @@ import base64
 from openai import OpenAI
 from discord import ButtonStyle, Interaction
 from discord.ui import Button, View
+from flask import Flask
+from threading import Thread
+import time
+import torch
+from keep_alive import keep_alive
+
+# Flask app for keeping the bot alive
+app = Flask('')
+
+@app.route('/')
+def home():
+    return "Bot is alive"
+
+def run_flask():
+    port = int(os.getenv('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
+
+def keep_alive():
+    server = Thread(target=run_flask)
+    server.daemon = True
+    server.start()
 
 class GoogleSheetsLogger:
     def __init__(self, credentials_json, spreadsheet_id):
@@ -115,66 +139,87 @@ class FeedbackView(View):
         self.add_item(Button(style=ButtonStyle.red, custom_id="not_accurate", label="Not Accurate", emoji="❌"))
         self.add_item(Button(style=ButtonStyle.blurple, custom_id="can_improve", label="Can Be Improved", emoji="📝"))
 
+
 class FreshdeskKBBot:
     # Define ALLOWED_CATEGORIES as a class attribute
     ALLOWED_CATEGORIES = [
-        "General Info",            # Matches exactly
+        "General Info",
         "Training Programme (Customer Success)",
         "Workflow",
         "Corporate Gift Products",
         "Product Specific Articles"
     ]
     def __init__(self, discord_token, freshdesk_domain, freshdesk_api_key, 
-                 openai_api_key, sheets_creds_json, spreadsheet_id):
-        # Initialize Discord bot with all intents
+                openai_api_key, sheets_creds_json, spreadsheet_id):
+        # Initialize bot
         intents = discord.Intents.default()
         intents.message_content = True
-        intents.messages = True
-        self.bot = commands.Bot(command_prefix='!', intents=intents)
-        self.bot.remove_command('help')
-        self.discord_token = discord_token
+        self.bot = commands.Bot(command_prefix='!', intents=intents)  # Initialize self.bot first
+        self.discord_token = discord_token  # Store token
 
-        # Initialize Google Sheets logger
-        self.sheets_logger = GoogleSheetsLogger(sheets_creds_json, spreadsheet_id)
-
-        # Freshdesk configuration
+        # Store other configurations
         self.freshdesk_domain = freshdesk_domain
         self.freshdesk_api_key = freshdesk_api_key
         self.base_url = f"https://{freshdesk_domain}.freshdesk.com/api/v2"
 
-        # OpenAI configuration
+        # Initialize OpenAI client
         self.openai_client = OpenAI(api_key=openai_api_key)
 
-        # Initialize sentence transformer model
-        self.model = SentenceTransformer('all-MiniLM-L6-v2')
+        # Initialize Google Sheets logger
+        self.sheets_logger = GoogleSheetsLogger(sheets_creds_json, spreadsheet_id)
 
-        # Cache for KB articles
+        # Initialize empty cache
         self.kb_cache = []
         self.kb_embeddings = None
+        self._model = None
+        self._model_loaded = False
+
+        # Remove default help command AFTER bot is initialized
+        self.bot.remove_command('help')
 
         # Set up Discord commands
+        self.setup_commands()
+
+    @property
+    def model(self):
+        if not self._model_loaded:
+            try:
+                print("Loading sentence transformer model...")
+                # Add timeout and device placement
+                os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+                self._model = SentenceTransformer('all-MiniLM-L6-v2', device='cpu')
+                torch.set_num_threads(4)  # Limit threads
+                self._model_loaded = True
+                print("Model loaded successfully")
+            except Exception as e:
+                print(f"Error loading model: {str(e)}")
+                self._model = None
+                self._model_loaded = False
+        return self._model
+
+    def setup_commands(self):
         @self.bot.event
         async def on_ready():
             print(f'{self.bot.user} has connected to Discord!')
-            print('Loading knowledge base articles...')
             try:
-                await self.load_kb_articles()
-                print('Bot is ready to answer questions!')
+                await self.load_kb_articles()  # Load articles
+                print('Bot is ready to answer questions! Knowledge base loaded.')
             except Exception as e:
                 print(f'Error loading articles: {str(e)}')
-                print('Bot is ready but no articles are loaded.')
 
-        @self.bot.command(name='check_article')
+        @self.bot.command(name='check_article')  # Using self.bot consistently
         async def check_article(ctx):
-            """Check a specific article directly"""
             async with ctx.typing():
                 await ctx.send("Checking target article directly... Please check the console output.")
                 await self.check_single_article()
                 await ctx.send("Article check complete. Check the console for results.")
-        
+
+        @self.bot.command(name='test')  # Fixed from @bot to @self.bot
+        async def test(ctx):
+            await ctx.send('Bot is working!')
+
         @self.bot.command(name='diagnose_kb')
         async def diagnose_kb(ctx):
-            """Diagnose knowledge base content"""
             async with ctx.typing():
                 await ctx.send("Running knowledge base diagnostic... Please check the console output.")
                 await self.diagnose_kb_content()
@@ -184,75 +229,58 @@ class FreshdeskKBBot:
         async def on_interaction(interaction: Interaction):
             if not interaction.data:
                 return
-
-            # Handle button clicks
+    
             if interaction.data.get("custom_id") in ["accurate", "not_accurate", "can_improve"]:
                 feedback_type = interaction.data["custom_id"]
-
-                # Get the original message
                 orig_message = interaction.message
-
-                # Get the question from the message content
                 message_content = interaction.message.content
                 question_part = message_content.split("Question: ")
                 if len(question_part) > 1:
                     original_question = question_part[1].split("\n")[0]
                 else:
                     original_question = "Question not found"
-
-                # Update feedback in Google Sheets
+    
                 status_mapping = {
                     "accurate": "Resolved",
                     "not_accurate": "Update Needed",
                     "can_improve": "Review Needed"
                 }
-
+    
                 self.sheets_logger.update_feedback(
                     question=original_question,
                     feedback=feedback_type,
                     status=status_mapping[feedback_type]
                 )
-
-                # Prepare feedback message
+    
                 feedback_messages = {
                     "accurate": "Thank you for confirming that the answer was accurate! 🎯",
                     "not_accurate": "Thank you for letting us know the answer wasn't accurate. We'll work on improving it! 🎯",
                     "can_improve": "Thank you for the feedback! We'll work on improving the answer quality. 📈"
                 }
-
-                # Send feedback confirmation
+    
                 await interaction.response.send_message(
                     feedback_messages[feedback_type],
-                    ephemeral=True  # Only visible to the user who clicked
+                    ephemeral=True
                 )
-
-                # Disable the buttons after feedback is received
+    
                 try:
                     for child in orig_message.components:
                         for button in child.children:
                             button.disabled = True
-
                     await orig_message.edit(view=View.from_message(orig_message))
                 except Exception as e:
                     print(f"Error disabling buttons: {str(e)}")
 
         @self.bot.command(name='ask')
         async def ask(ctx, *, question):
-            """Ask a question to search the knowledge base"""
             async with ctx.typing():
                 response = await self.get_gpt_answer(question)
-
-                # Log the interaction to Google Sheets
                 self.sheets_logger.log_interaction(
                     question=question,
                     answer=response,
                     status="New"
                 )
-
-                # Create view with feedback buttons
                 view = FeedbackView(question, response)
-
-                # Send response with buttons
                 await ctx.send(
                     f"Question: {question}\n\n{response}",
                     view=view
@@ -260,7 +288,6 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='help')
         async def help_command(ctx):
-            """Show help information"""
             help_text = (
                 "**Available Commands:**\n"
                 "`!ask <your question>` - Ask me anything about our knowledge base\n"
@@ -627,12 +654,24 @@ class FreshdeskKBBot:
 
     async def find_relevant_articles(self, question, num_articles=3):
         """Find the most relevant articles for a question"""
-        if not self.kb_cache:
+        if not self.kb_cache or not self.model:
             return []
 
         try:
             # Create embedding for the question
             question_embedding = self.model.encode([question])
+
+            if self.kb_embeddings is None:
+                print("Creating embeddings for cached articles...")
+                texts = [
+                    f"Category: {article['category']}\n"
+                    f"Folder: {article['folder']}\n"
+                    f"Title: {article['title']}\n\n"
+                    f"{article['description']}"
+                    for article in self.kb_cache
+                ]
+                self.kb_embeddings = self.model.encode(texts)
+                print("Embeddings created successfully")
 
             # Calculate similarity scores
             similarities = cosine_similarity(question_embedding, self.kb_embeddings)[0]
@@ -730,12 +769,16 @@ Your response should be in Discord-compatible markdown format.
 
     def run(self):
         """Start the Discord bot"""
-        self.bot.run(self.discord_token)
+        print("Starting bot...")
+        self.bot.run(self.discord_token)  # Use stored token
 
 
 if __name__ == "__main__":
     try:
-        # Load environment variables with explicit error messages
+        print("Starting initialization...")
+        start_time = time.time()
+
+        # Load environment variables
         required_env_vars = {
             "DISCORD_TOKEN": os.getenv("DISCORD_TOKEN"),
             "FRESHDESK_DOMAIN": os.getenv("FRESHDESK_DOMAIN"),
@@ -745,15 +788,10 @@ if __name__ == "__main__":
             "SPREADSHEET_ID": os.getenv("SPREADSHEET_ID")
         }
 
-        # Check for missing environment variables
+        # Check for missing variables
         missing_vars = [var for var, value in required_env_vars.items() if not value]
-
         if missing_vars:
-            print("Error: Missing required environment variables:")
-            for var in missing_vars:
-                print(f"- {var}")
-            print("\nPlease set these variables in your Replit Secrets tab.")
-            exit(1)
+            raise ValueError(f"Missing environment variables: {', '.join(missing_vars)}")
 
         print("Initializing bot...")
         kb_bot = FreshdeskKBBot(
@@ -765,12 +803,16 @@ if __name__ == "__main__":
             required_env_vars["SPREADSHEET_ID"]
         )
 
+        print(f"Initialization completed in {time.time() - start_time:.2f} seconds")
         print("Starting bot...")
-        kb_bot.run()
+
+        # Start the keep alive server
+        keep_alive()
+
+        # Run the bot
+        kb_bot.run()  # Use the class method to run
 
     except Exception as e:
-        print(f"Fatal error during bot initialization: {str(e)}")
-        print("\nTraceback:")
+        print(f"Fatal error during initialization: {str(e)}")
         traceback.print_exc()
-        print("\nPlease check your environment variables and dependencies.")
         exit(1)

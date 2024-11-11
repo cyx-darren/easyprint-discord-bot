@@ -1,10 +1,28 @@
-run = "python main.py"
-language = "python3"
-entrypoint = "main.py"
+run = "python3 main.py"
+modules = ["python-3.10:v18-20230807-322e88b"]
 
 [nix]
 channel = "stable-22_11"
 
+[env]
+PYTHONPATH = "${REPL_HOME}/.pythonlibs/lib/python3.10/site-packages"
+PYTHONUNBUFFERED = "1"
+FLASK_DEBUG = "1"
+GUNICORN_CMD_ARGS = "--log-level debug --access-logfile - --error-logfile - --capture-output"
+
 [deployment]
-run = ["python", "main.py"]
+build = [
+  "sh",
+  "-c",
+  "echo 'Starting build process...' && python3 -m pip install --user flask gunicorn && echo 'Packages installed successfully'"
+]
+run = [
+  "sh",
+  "-c",
+  "echo 'Starting server...' && exec gunicorn --log-level debug --access-logfile - --error-logfile - --capture-output --workers 1 deploy:app"
+]
 deploymentTarget = "cloudrun"
+
+[[ports]]
+localPort = 8080
+externalPort = 80
