@@ -16,7 +16,7 @@ REPLIT_PYTHON_PACKAGE_LAYER = "1"
 run = [
   "sh",
   "-c",
-  "gunicorn --workers 1 --threads 8 --timeout 0 --keep-alive 120 --worker-class gthread --bind 0.0.0.0:$PORT main:app"
+  "pip install -r requirements-deploy.txt && gunicorn --workers 1 --threads 4 --timeout 120 --bind 0.0.0.0:$PORT deploy:app"
 ]
 deploymentTarget = "gce"
 ignorePorts = false
