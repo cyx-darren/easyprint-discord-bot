@@ -1,27 +1,21 @@
+
 #!/bin/bash
 set -e
 
-# Log startup information
-echo "=== Starting deployment process ===" >&2
-echo "Current directory: $(pwd)" >&2
-echo "Python version: $(python3 --version)" >&2
-echo "Environment variables:" >&2
-env | grep -E 'PYTHON|FLASK|GUNICORN|PORT' >&2
+echo "Starting deployment process..."
+python3 -m pip install --no-cache-dir -r requirements.txt
 
-# Install requirements
-echo "=== Installing requirements ===" >&2
-python3 -m pip install --user flask gunicorn
+export PYTHONUNBUFFERED=1
+export FLASK_APP=deploy.py
 
-# Start server with logging
-echo "=== Starting server ===" >&2
 exec gunicorn \
-  --preload \
   --workers 1 \
-  --threads 4 \
+  --threads 8 \
   --timeout 0 \
+  --keep-alive 120 \
   --bind "0.0.0.0:${PORT:-8080}" \
-  --log-level debug \
   --access-logfile - \
   --error-logfile - \
-  --capture-output \
-  deploy:app 2>&1
+  --log-level info \
+  --preload \
+  deploy:app
