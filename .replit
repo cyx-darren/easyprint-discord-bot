@@ -1,3 +1,5 @@
+
+# .replit
 run = "python3 main.py"
 modules = ["python-3.10:v18-20230807-322e88b"]
 
@@ -7,21 +9,17 @@ channel = "stable-22_11"
 [env]
 PYTHONPATH = "${REPL_HOME}/.pythonlibs/lib/python3.10/site-packages"
 PYTHONUNBUFFERED = "1"
-FLASK_DEBUG = "1"
-GUNICORN_CMD_ARGS = "--log-level debug --access-logfile - --error-logfile - --capture-output"
+FLASK_DEBUG = "0"
+REPLIT_PYTHON_PACKAGE_LAYER = "1"
 
 [deployment]
-build = [
-  "sh",
-  "-c",
-  "echo 'Starting build process...' && python3 -m pip install --user flask gunicorn && echo 'Packages installed successfully'"
-]
 run = [
   "sh",
   "-c",
-  "echo 'Starting server...' && exec gunicorn --log-level debug --access-logfile - --error-logfile - --capture-output --workers 1 deploy:app"
+  "gunicorn --workers 1 --threads 8 --timeout 0 --keep-alive 120 --worker-class gthread --bind 0.0.0.0:$PORT main:app"
 ]
-deploymentTarget = "cloudrun"
+deploymentTarget = "gce"
+ignorePorts = false
 
 [[ports]]
 localPort = 8080
