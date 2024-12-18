@@ -508,12 +508,12 @@ class FreshdeskKBBot:
                             
                                             # Get folder info
                                             folder_url = f"{self.base_url}/solutions/folders/{article.get('folder_id')}"
-                            folder_info = await self.async_get(session, folder_url, headers)
-                            folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
+                                            folder_info = await self.async_get(session, folder_url, headers)
+                                            folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
                             
-                            # Add article to cache
-                            article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
-                            self.kb_cache.append({
+                                            # Add article to cache
+                                            article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
+                                            self.kb_cache.append({
                                 'title': article.get('title'),
                                 'description': article.get('description_text', ''),
                                 'url': article_url,
