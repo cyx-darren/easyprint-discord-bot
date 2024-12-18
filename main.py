@@ -197,13 +197,27 @@ class FreshdeskKBBot:
                 self._model_loaded = False
         return self._model
 
+    async def refresh_kb_task(self):
+        """Background task to periodically refresh knowledge base articles"""
+        await self.bot.wait_until_ready()
+        while not self.bot.is_closed():
+            try:
+                await self.load_kb_articles()
+                print('Knowledge base refreshed successfully')
+                await asyncio.sleep(300)  # Refresh every 5 minutes
+            except Exception as e:
+                print(f'Error refreshing articles: {str(e)}')
+                await asyncio.sleep(60)  # Wait a minute before retrying if there's an error
+
     def setup_commands(self):
         @self.bot.event
         async def on_ready():
             print(f'{self.bot.user} has connected to Discord!')
             try:
-                await self.load_kb_articles()  # Load articles
+                await self.load_kb_articles()  # Initial load of articles
                 print('Bot is ready to answer questions! Knowledge base loaded.')
+                # Start the refresh task
+                self.bot.loop.create_task(self.refresh_kb_task())
             except Exception as e:
                 print(f'Error loading articles: {str(e)}')
 
