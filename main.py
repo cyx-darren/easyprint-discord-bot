@@ -482,20 +482,29 @@ class FreshdeskKBBot:
             }
 
             async with aiohttp.ClientSession() as session:
-                # Load all articles from the solutions endpoint
-                articles_url = f"{self.base_url}/solutions/articles"
-                print("\n🔍 Loading all articles from solutions endpoint...")
+                # Load articles through categories and folders instead of direct endpoint
+                print("\n🔍 Loading articles through categories and folders...")
+                categories_url = f"{self.base_url}/solutions/categories"
                 
-                all_articles = await self.async_get(session, articles_url, headers)
-                if all_articles:
-                    for article in all_articles:
-                        if article.get('status') == 2:  # Published status
-                            article_id = str(article.get('id'))
-                            
-                            # Get category info
-                            category_url = f"{self.base_url}/solutions/categories/{article.get('category_id')}"
-                            category_info = await self.async_get(session, category_url, headers)
-                            category_name = category_info.get('name') if category_info else 'Unknown Category'
+                categories = await self.async_get(session, categories_url, headers)
+                if categories:
+                    for category in categories:
+                        category_id = category.get('id')
+                        folders_url = f"{self.base_url}/solutions/categories/{category_id}/folders"
+                        folders = await self.async_get(session, folders_url, headers)
+                        
+                        if folders:
+                            for folder in folders:
+                                folder_id = folder.get('id')
+                                articles_url = f"{self.base_url}/solutions/folders/{folder_id}/articles"
+                                articles = await self.async_get(session, articles_url, headers)
+                                
+                                if articles:
+                                    for article in articles:
+                                        if article.get('status') == 2:  # Published status
+                                article_id = str(article.get('id'))
+                                category_name = category.get('name', 'Unknown Category')
+                                folder_name = folder.get('name', 'Unknown Folder')
                             
                             # Get folder info
                             folder_url = f"{self.base_url}/solutions/folders/{article.get('folder_id')}"
