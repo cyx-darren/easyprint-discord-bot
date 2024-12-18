@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+from dotenv import load_dotenv
+import os
+
+# Load environment variables from .env file
+load_dotenv()
+
 # Rest of your existing main.py code follows...
 
 from google.oauth2.service_account import Credentials
@@ -6,7 +12,6 @@ from googleapiclient.discovery import build
 from datetime import datetime
 import pytz
 import json
-import os
 import discord
 from discord.ext import commands
 import aiohttp
@@ -24,6 +29,8 @@ from threading import Thread
 import time
 import torch
 from keep_alive import keep_alive
+
+from google.oauth2.service_account import Credentials
 
 # Flask app for keeping the bot alive
 app = Flask('')
@@ -446,20 +453,8 @@ class FreshdeskKBBot:
             result = await self.diagnose_folder_issues()
             await ctx.send(result)
 
-async def refresh_kb_cache(self):
-        """Refresh the knowledge base cache"""
-        self.kb_cache = []
-        self.kb_embeddings = None
-        await self.load_kb_articles()
 
-    @commands.command(name='refresh')
-    async def refresh_cache(self, ctx):
-        """Refresh the knowledge base cache"""
-        async with ctx.typing():
-            await ctx.send("Refreshing knowledge base cache...")
-            await self.refresh_kb_cache()
-            await ctx.send(f"Cache refreshed. Total articles: {len(self.kb_cache)}")
-
+    
     async def load_kb_articles(self):
         """Fetch and cache all knowledge base articles with error tracking"""
         try:
