@@ -482,36 +482,39 @@ class FreshdeskKBBot:
             }
 
             async with aiohttp.ClientSession() as session:
-                # First load target article directly
-                target_id = "151000201537"
-                direct_url = f"{self.base_url}/solutions/articles/{target_id}"
-                print(f"\n🔍 Checking target article directly: {direct_url}")
+                # Load specific target articles directly
+                target_ids = ["151000201537", "151000201458"]  # Add any specific articles here
+                for target_id in target_ids:
+                    direct_url = f"{self.base_url}/solutions/articles/{target_id}"
+                    print(f"\n🔍 Checking target article directly: {direct_url}")
 
-                target_article = await self.async_get(session, direct_url, headers)
-                if target_article:
-                    print("\n✅ Found target article:")
-                    print(f"Title: {target_article.get('title')}")
-                    print(f"Category ID: {target_article.get('category_id')}")
-
-                    category_url = f"{self.base_url}/solutions/categories/{target_article.get('category_id')}"
-                    category_info = await self.async_get(session, category_url, headers)
-                    if category_info:
-                        category_name = category_info.get('name')
-                        print(f"Category Name: {category_name}")
-
-                        # Add target article to cache
-                        article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{target_id}"
-                        if target_article.get('status') == 2:
-                            self.kb_cache.append({
-                                'title': target_article.get('title'),
-                                'description': target_article.get('description_text', ''),
-                                'url': article_url,
-                                'category': category_name,
-                                'folder': 'International Deliveries',
-                                'id': target_id,
-                                'status': target_article.get('status')
-                            })
-                            print("✅ Target article added to cache")
+                    target_article = await self.async_get(session, direct_url, headers)
+                    if target_article:
+                        print(f"\n✅ Found target article: {target_article.get('title')}")
+                        
+                        category_url = f"{self.base_url}/solutions/categories/{target_article.get('category_id')}"
+                        category_info = await self.async_get(session, category_url, headers)
+                        if category_info:
+                            category_name = category_info.get('name')
+                            
+                            # Get folder info
+                            folder_url = f"{self.base_url}/solutions/folders/{target_article.get('folder_id')}"
+                            folder_info = await self.async_get(session, folder_url, headers)
+                            folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
+                            
+                            # Add target article to cache
+                            article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{target_id}"
+                            if target_article.get('status') == 2:  # Published status
+                                self.kb_cache.append({
+                                    'title': target_article.get('title'),
+                                    'description': target_article.get('description_text', ''),
+                                    'url': article_url,
+                                    'category': category_name,
+                                    'folder': folder_name,
+                                    'id': target_id,
+                                    'status': target_article.get('status')
+                                })
+                                print(f"✅ Target article added to cache: {target_article.get('title')}")
 
                 # Now load all categories and articles
                 print("\n📚 Loading all articles from categories...")
