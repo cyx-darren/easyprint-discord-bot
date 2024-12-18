@@ -300,7 +300,8 @@ class FreshdeskKBBot:
                 "`!ask <your question>` - Ask me anything about our knowledge base\n"
                 "`!help` - Show this help message\n"
                 "`!diagnose` - Run diagnostic on Freshdesk folders\n"
-                "`!visibility <folder_id>` - Check and update folder visibility\n\n"
+                "`!visibility <folder_id>` - Check and update folder visibility\n"
+                "`!refresh` - Manually refresh the knowledge base to fetch new articles\n\n"
                 "**Available Categories:**\n"
                 "• General Info\n"
                 "• Training Programme (Customer Success)\n"
@@ -329,6 +330,17 @@ class FreshdeskKBBot:
                 await ctx.send(f"Checking visibility for folder {folder_id}...")
                 await self.check_folder_visibility(folder_id)
                 await ctx.send("Visibility check complete. Please check the console output.")
+
+        @self.bot.command(name='refresh')
+        async def refresh(ctx):
+            """Manual refresh command to reload all articles"""
+            try:
+                async with ctx.typing():
+                    await ctx.send("🔄 Starting knowledge base refresh...")
+                    await self.load_kb_articles()  # Reload all articles
+                    await ctx.send(f"✅ Knowledge base refreshed successfully! Total articles in cache: {len(self.kb_cache)}")
+            except Exception as e:
+                await ctx.send(f"❌ Error refreshing knowledge base: {str(e)}")
 
     async def check_folder_visibility(self, folder_id):
         """Check and optionally update a folder's visibility settings"""
