@@ -482,13 +482,38 @@ class FreshdeskKBBot:
             }
 
             async with aiohttp.ClientSession() as session:
-                # Load specific target articles directly
-                target_ids = ["151000201537", "151000201458"]  # Add any specific articles here
-                for target_id in target_ids:
-                    direct_url = f"{self.base_url}/solutions/articles/{target_id}"
-                    print(f"\n🔍 Checking target article directly: {direct_url}")
-
-                    target_article = await self.async_get(session, direct_url, headers)
+                # Load all articles from the solutions endpoint
+                articles_url = f"{self.base_url}/solutions/articles"
+                print("\n🔍 Loading all articles from solutions endpoint...")
+                
+                all_articles = await self.async_get(session, articles_url, headers)
+                if all_articles:
+                    for article in all_articles:
+                        if article.get('status') == 2:  # Published status
+                            article_id = str(article.get('id'))
+                            
+                            # Get category info
+                            category_url = f"{self.base_url}/solutions/categories/{article.get('category_id')}"
+                            category_info = await self.async_get(session, category_url, headers)
+                            category_name = category_info.get('name') if category_info else 'Unknown Category'
+                            
+                            # Get folder info
+                            folder_url = f"{self.base_url}/solutions/folders/{article.get('folder_id')}"
+                            folder_info = await self.async_get(session, folder_url, headers)
+                            folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
+                            
+                            # Add article to cache
+                            article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
+                            self.kb_cache.append({
+                                'title': article.get('title'),
+                                'description': article.get('description_text', ''),
+                                'url': article_url,
+                                'category': category_name,
+                                'folder': folder_name,
+                                'id': article_id,
+                                'status': article.get('status')
+                            })
+                            print(f"✅ Added article: {article.get('title')}")
                     if target_article:
                         print(f"\n✅ Found target article: {target_article.get('title')}")
                         
