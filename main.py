@@ -514,32 +514,7 @@ class FreshdeskKBBot:
                                 'status': article.get('status')
                             })
                             print(f"✅ Added article: {article.get('title')}")
-                    if target_article:
-                        print(f"\n✅ Found target article: {target_article.get('title')}")
-                        
-                        category_url = f"{self.base_url}/solutions/categories/{target_article.get('category_id')}"
-                        category_info = await self.async_get(session, category_url, headers)
-                        if category_info:
-                            category_name = category_info.get('name')
-                            
-                            # Get folder info
-                            folder_url = f"{self.base_url}/solutions/folders/{target_article.get('folder_id')}"
-                            folder_info = await self.async_get(session, folder_url, headers)
-                            folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
-                            
-                            # Add target article to cache
-                            article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{target_id}"
-                            if target_article.get('status') == 2:  # Published status
-                                self.kb_cache.append({
-                                    'title': target_article.get('title'),
-                                    'description': target_article.get('description_text', ''),
-                                    'url': article_url,
-                                    'category': category_name,
-                                    'folder': folder_name,
-                                    'id': target_id,
-                                    'status': target_article.get('status')
-                                })
-                                print(f"✅ Target article added to cache: {target_article.get('title')}")
+                    
 
                 # Now load all categories and articles
                 print("\n📚 Loading all articles from categories...")
@@ -572,7 +547,7 @@ class FreshdeskKBBot:
 
                                     if articles:
                                         for article in articles:
-                                            if article.get('status') == 2 and str(article.get('id')) != target_id:
+                                            if article.get('status') == 2:
                                                 article_id = article.get('id', '')
                                                 article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
 
