@@ -502,12 +502,12 @@ class FreshdeskKBBot:
                                 if articles:
                                     for article in articles:
                                         if article.get('status') == 2:  # Published status
-                                article_id = str(article.get('id'))
-                                category_name = category.get('name', 'Unknown Category')
-                                folder_name = folder.get('name', 'Unknown Folder')
+                                            article_id = str(article.get('id'))
+                                            category_name = category.get('name', 'Unknown Category')
+                                            folder_name = folder.get('name', 'Unknown Folder')
                             
-                            # Get folder info
-                            folder_url = f"{self.base_url}/solutions/folders/{article.get('folder_id')}"
+                                            # Get folder info
+                                            folder_url = f"{self.base_url}/solutions/folders/{article.get('folder_id')}"
                             folder_info = await self.async_get(session, folder_url, headers)
                             folder_name = folder_info.get('name') if folder_info else 'Unknown Folder'
                             
