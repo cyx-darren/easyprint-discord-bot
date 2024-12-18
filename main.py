@@ -453,17 +453,38 @@ class FreshdeskKBBot:
             result = await self.diagnose_folder_issues()
             await ctx.send(result)
 
+    async def get_all_articles_from_folder(self, session, folder_id, headers):
+        """Fetch all articles from a folder using pagination"""
+        all_articles = []
+        page = 1
+        per_page = 30  # Freshdesk's default page size
 
+        while True:
+            print(f"  📄 Fetching page {page} of articles...")
+            articles_url = f"{self.base_url}/solutions/folders/{folder_id}/articles?page={page}&per_page={per_page}"
+
+            current_page = await self.async_get(session, articles_url, headers)
+
+            if not current_page or len(current_page) == 0:
+                break
+
+            all_articles.extend(current_page)
+            print(f"  ✅ Found {len(current_page)} articles on page {page}")
+
+            if len(current_page) < per_page:  # If we got fewer articles than the page size, we've hit the end
+                break
+
+            page += 1
+
+        print(f"  📚 Total articles found in folder: {len(all_articles)}")
+        return all_articles
     
     async def load_kb_articles(self):
-        """Fetch and cache all knowledge base articles with error tracking"""
+        """Fetch and cache all knowledge base articles with pagination"""
         try:
-            print("\nStarting to load knowledge base articles...")
-
-            # Print Freshdesk configuration
-            print(f"\nFreshdesk Configuration:")
-            print(f"Domain: {self.freshdesk_domain}")
-            print(f"Base URL: {self.base_url}")
+            print("\n=== Starting Knowledge Base Load with Debug Logging ===")
+            print(f"Current time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+            self.kb_cache = []  # Clear existing cache
 
             auth_str = f"{self.freshdesk_api_key}:X"
             auth_bytes = auth_str.encode('ascii')
@@ -475,100 +496,133 @@ class FreshdeskKBBot:
             }
 
             async with aiohttp.ClientSession() as session:
-                # First load target article directly
-                target_id = "151000201537"
-                direct_url = f"{self.base_url}/solutions/articles/{target_id}"
-                print(f"\n🔍 Checking target article directly: {direct_url}")
+                # Test API connection first
+                test_url = f"{self.base_url}/solutions/categories"
+                async with session.get(test_url, headers=headers) as response:
+                    print(f"\n🔑 API Connection Test:")
+                    print(f"Status: {response.status}")
+                    print(f"Rate Limit Remaining: {response.headers.get('X-Ratelimit-Remaining', 'N/A')}")
 
-                target_article = await self.async_get(session, direct_url, headers)
-                if target_article:
-                    print("\n✅ Found target article:")
-                    print(f"Title: {target_article.get('title')}")
-                    print(f"Category ID: {target_article.get('category_id')}")
+                    if response.status != 200:
+                        print(f"❌ API access error: {response.status}")
+                        return
+                    print("✅ API connection successful")
 
-                    category_url = f"{self.base_url}/solutions/categories/{target_article.get('category_id')}"
-                    category_info = await self.async_get(session, category_url, headers)
-                    if category_info:
-                        category_name = category_info.get('name')
-                        print(f"Category Name: {category_name}")
-
-                        # Add target article to cache
-                        article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{target_id}"
-                        if target_article.get('status') == 2:
-                            self.kb_cache.append({
-                                'title': target_article.get('title'),
-                                'description': target_article.get('description_text', ''),
-                                'url': article_url,
-                                'category': category_name,
-                                'folder': 'International Deliveries',
-                                'id': target_id,
-                                'status': target_article.get('status')
-                            })
-                            print("✅ Target article added to cache")
-
-                # Now load all categories and articles
-                print("\n📚 Loading all articles from categories...")
+                # Load categories
+                print("\n📚 Loading categories...")
                 categories = await self.async_get(session, f"{self.base_url}/solutions/categories", headers)
 
-                if categories:
-                    for category in categories:
-                        category_name = category.get('name', '').strip()
-                        category_id = category.get('id', '')
+                if not categories:
+                    print("❌ No categories returned from API")
+                    return
 
-                        if category_name.lower() in [cat.lower() for cat in self.ALLOWED_CATEGORIES]:
-                            print(f"\n📁 Processing category: {category_name}")
+                print(f"Found {len(categories)} total categories")
 
-                            folders = await self.async_get(
-                                session,
-                                f"{self.base_url}/solutions/categories/{category_id}/folders",
-                                headers
-                            )
+                for category in categories:
+                    category_name = category.get('name', '').strip()
+                    category_id = category.get('id', '')
 
-                            if folders:
-                                for folder in folders:
-                                    folder_name = folder.get('name', '')
-                                    folder_id = folder.get('id', '')
+                    print(f"\n==== Category: {category_name} (ID: {category_id}) ====")
 
-                                    articles = await self.async_get(
-                                        session,
-                                        f"{self.base_url}/solutions/folders/{folder_id}/articles",
-                                        headers
-                                    )
+                    if category_name.lower() not in [cat.lower() for cat in self.ALLOWED_CATEGORIES]:
+                        print(f"⏩ Skipping category {category_name} - not in allowed list")
+                        continue
 
-                                    if articles:
-                                        for article in articles:
-                                            if article.get('status') == 2 and str(article.get('id')) != target_id:
-                                                article_id = article.get('id', '')
-                                                article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
+                    print(f"✅ Processing allowed category: {category_name}")
 
-                                                self.kb_cache.append({
-                                                    'title': article.get('title'),
-                                                    'description': article.get('description_text', ''),
-                                                    'url': article_url,
-                                                    'category': category_name,
-                                                    'folder': folder_name,
-                                                    'id': article_id,
-                                                    'status': article.get('status')
-                                                })
-                                                print(f"✅ Added article: {article.get('title')}")
+                    # Load folders
+                    folders_url = f"{self.base_url}/solutions/categories/{category_id}/folders"
+                    folders = await self.async_get(session, folders_url, headers)
 
-            # Create embeddings for all cached articles
-            if self.kb_cache:
-                print(f"\n✅ Successfully loaded {len(self.kb_cache)} articles")
-                texts = [
-                    f"Category: {article['category']}\n"
-                    f"Folder: {article['folder']}\n"
-                    f"Title: {article['title']}\n\n"
-                    f"{article['description']}"
-                    for article in self.kb_cache
-                ]
-                self.kb_embeddings = self.model.encode(texts)
-                print("✅ Created embeddings for all articles")
-            else:
-                print("\n❌ No articles were cached")
+                    if not folders:
+                        print(f"⚠️ No folders found in category {category_name}")
+                        continue
+
+                    print(f"Found {len(folders)} folders in category")
+
+                    for folder in folders:
+                        folder_name = folder.get('name', '')
+                        folder_id = folder.get('id', '')
+
+                        print(f"\n--- Folder: {folder_name} (ID: {folder_id}) ---")
+
+                        # Use the paginated method to get ALL articles
+                        articles = await self.get_all_articles_from_folder(session, folder_id, headers)
+
+                        if not articles:
+                            print(f"⚠️ No articles found in folder {folder_name}")
+                            continue
+
+                        print(f"Found {len(articles)} total articles in folder")
+
+                        for article in articles:
+                            article_id = str(article.get('id', ''))
+                            article_status = article.get('status')
+                            article_title = article.get('title', 'No Title')
+
+                            print(f"\nArticle: {article_title}")
+                            print(f"  ID: {article_id}")
+                            print(f"  Status: {article_status}")
+                            print(f"  Created: {article.get('created_at')}")
+                            print(f"  Updated: {article.get('updated_at')}")
+
+                            if article_status == 2:
+                                print("  ✅ Status is published (2)")
+                                article_url = f"https://{self.freshdesk_domain}.freshdesk.com/a/solutions/articles/{article_id}"
+
+                                # Get full article content
+                                full_article = await self.async_get(
+                                    session,
+                                    f"{self.base_url}/solutions/articles/{article_id}",
+                                    headers
+                                )
+
+                                if full_article:
+                                    self.kb_cache.append({
+                                        'title': full_article.get('title'),
+                                        'description': full_article.get('description_text', ''),
+                                        'url': article_url,
+                                        'category': category_name,
+                                        'folder': folder_name,
+                                        'id': article_id,
+                                        'status': article_status,
+                                        'created_at': full_article.get('created_at'),
+                                        'updated_at': full_article.get('updated_at')
+                                    })
+                                    print("  ✅ Successfully added to cache")
+                                else:
+                                    print("  ❌ Failed to fetch full article content")
+                            else:
+                                print(f"  ⏩ Skipping - status is not published ({article_status})")
+
+                # Final summary
+                print("\n=== Loading Summary ===")
+                print(f"Total articles cached: {len(self.kb_cache)}")
+
+                if self.kb_cache:
+                    print("\n🔄 Creating embeddings...")
+                    texts = [
+                        f"Category: {article['category']}\n"
+                        f"Folder: {article['folder']}\n"
+                        f"Title: {article['title']}\n\n"
+                        f"{article['description']}"
+                        for article in self.kb_cache
+                    ]
+                    self.kb_embeddings = self.model.encode(texts)
+                    print("✅ Created embeddings for all articles")
+
+                    # Print newest articles
+                    print("\n📅 Most Recent Articles:")
+                    sorted_articles = sorted(self.kb_cache, 
+                                          key=lambda x: x.get('updated_at', ''), 
+                                          reverse=True)
+                    for article in sorted_articles[:5]:
+                        print(f"- {article['title']} (Updated: {article['updated_at']})")
+                else:
+                    print("\n⚠️ No articles were cached")
 
         except Exception as e:
-            print(f"Error loading articles: {str(e)}")
+            print(f"\n❌ Error loading articles: {str(e)}")
             print("Traceback:", traceback.format_exc())
 
     async def check_single_article(self):
