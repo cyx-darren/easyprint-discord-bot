@@ -447,21 +447,19 @@ class FreshdeskKBBot:
             await ctx.send(result)
 
 async def refresh_kb_cache(self):
-    """Refresh the knowledge base cache"""
-    self.kb_cache = []
-    self.kb_embeddings = None
-    await self.load_kb_articles()
+        """Refresh the knowledge base cache"""
+        self.kb_cache = []
+        self.kb_embeddings = None
+        await self.load_kb_articles()
 
-@self.bot.command(name='refresh')
-async def refresh_cache(ctx):
-    """Refresh the knowledge base cache"""
-    async with ctx.typing():
-        await ctx.send("Refreshing knowledge base cache...")
-        await self.refresh_kb_cache()
-        await ctx.send(f"Cache refreshed. Total articles: {len(self.kb_cache)}")
+    @commands.command(name='refresh')
+    async def refresh_cache(self, ctx):
+        """Refresh the knowledge base cache"""
+        async with ctx.typing():
+            await ctx.send("Refreshing knowledge base cache...")
+            await self.refresh_kb_cache()
+            await ctx.send(f"Cache refreshed. Total articles: {len(self.kb_cache)}")
 
-
-    
     async def load_kb_articles(self):
         """Fetch and cache all knowledge base articles with error tracking"""
         try:
