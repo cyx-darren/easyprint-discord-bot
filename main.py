@@ -825,7 +825,7 @@ Your response should be in Discord-compatible markdown format.
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=1000,
-                temperature=0.7
+                temperature=0.3
             )
 
             answer = chat_completion.choices[0].message.content.strip()
