@@ -214,6 +214,14 @@ class FreshdeskKBBot:
             except Exception as e:
                 print(f'Error loading articles: {str(e)}')
 
+        @self.bot.event
+        async def on_message(message):
+            # Check if message is from Ticket Processing bot or a regular user
+            TICKET_PROCESSOR_BOT_ID = 1325036182496874538
+
+            if not message.author.bot or message.author.id == TICKET_PROCESSOR_BOT_ID:
+                await self.bot.process_commands(message)
+
         @self.bot.command(name='check_article')  # Using self.bot consistently
         async def check_article(ctx):
             async with ctx.typing():
@@ -280,18 +288,23 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='ask')
         async def ask(ctx, *, question):
-            async with ctx.typing():
-                response = await self.get_gpt_answer(question)
-                self.sheets_logger.log_interaction(
-                    question=question,
-                    answer=response,
-                    status="New"
-                )
-                view = FeedbackView(question, response)
-                await ctx.send(
-                    f"Question: {question}\n\n{response}",
-                    view=view
-                )
+            # Check if the message is from the Ticket Processing bot (replace with your bot's ID)
+            TICKET_PROCESSOR_BOT_ID = 1325036182496874538
+
+            # Allow commands from either users or the specific bot
+            if not ctx.author.bot or ctx.author.id == TICKET_PROCESSOR_BOT_ID:
+                async with ctx.typing():
+                    response = await self.get_gpt_answer(question)
+                    self.sheets_logger.log_interaction(
+                        question=question,
+                        answer=response,
+                        status="New"
+                    )
+                    view = FeedbackView(question, response)
+                    await ctx.send(
+                        f"Question: {question}\n\n{response}",
+                        view=view
+                    )
 
         @self.bot.command(name='help')
         async def help_command(ctx):
