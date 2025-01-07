@@ -29,6 +29,8 @@ from threading import Thread
 import time
 import torch
 from keep_alive import keep_alive
+from typing import Optional, Union
+from discord import Message, Interaction, Member, User
 
 from google.oauth2.service_account import Credentials
 
@@ -207,9 +209,53 @@ class FreshdeskKBBot:
                 self._model_loaded = False
         return self._model
 
-    async def check_allowed_author(self, ctx):
-        """Check if the author is allowed to use commands"""
-        return (not ctx.author.bot) or (ctx.author.id == self.TICKET_PROCESSOR_BOT_ID)
+    async def check_allowed_author(self, message_or_ctx):
+        """
+        Enhanced permission check that works with both Message and Context objects
+        Returns True if the author is either:
+        1. A non-bot user
+        2. The specific Ticket Processor bot
+        """
+        if hasattr(message_or_ctx, 'author'):
+            author = message_or_ctx.author
+        else:
+            author = message_or_ctx.message.author
+
+        return (not author.bot) or (author.id == self.TICKET_PROCESSOR_BOT_ID)
+
+    async def process_bot_command(self, message, question):
+        """
+        Process commands specifically from the Ticket Processor bot
+        """
+        try:
+            async with message.channel.typing():
+                # Get the response from GPT
+                response = await self.get_gpt_answer(question)
+
+                # Log the interaction
+                self.sheets_logger.log_interaction(
+                    question=question,
+                    answer=response,
+                    status="Bot Interaction"  # Special status for bot interactions
+                )
+
+                # Create feedback view
+                view = FeedbackView(question, response)
+
+                # Send response with feedback buttons
+                await message.channel.send(
+                    f"Question from Ticket Processor Bot: {question}\n\n{response}",
+                    view=view
+                )
+
+                # Return the response in case the bot needs it
+                return response
+
+        except Exception as e:
+            error_msg = f"Error processing bot question: {str(e)}"
+            print(error_msg)
+            await message.channel.send("Sorry, I encountered an error while processing the question. Please try again.")
+            return None
         
     def setup_commands(self):
         @self.bot.event
@@ -227,14 +273,20 @@ class FreshdeskKBBot:
             if message.author == self.bot.user:
                 return
 
-            # Process messages from regular users and the Ticket Processor bot
-            if not message.author.bot or message.author.id == self.TICKET_PROCESSOR_BOT_ID:
-                try:
-                    print(f"Processing message from {message.author.name} (ID: {message.author.id})")
-                    print(f"Message content: {message.content}")
-                    await self.bot.process_commands(message)
-                except Exception as e:
-                    print(f"Error processing message: {str(e)}")
+            try:
+                # Special handling for Ticket Processor Bot
+                if message.author.id == self.TICKET_PROCESSOR_BOT_ID:
+                    # Check if message starts with !ask
+                    if message.content.startswith('!ask '):
+                        question = message.content[5:].strip()  # Remove '!ask ' prefix
+                        await self.process_bot_command(message, question)
+                    return  # Don't process further commands for bot messages
+
+                # Process regular user messages
+                await self.bot.process_commands(message)
+
+            except Exception as e:
+                print(f"Error in on_message: {str(e)}")
 
         @self.bot.command(name='check_article')  # Using self.bot consistently
         async def check_article(ctx):
