@@ -156,6 +156,9 @@ class FreshdeskKBBot:
         "Corporate Gift Products",
         "Product Specific Articles"
     ]
+
+    TICKET_PROCESSOR_BOT_ID = 1325036182496874538
+    
     def __init__(self, discord_token, freshdesk_domain, freshdesk_api_key, 
                 openai_api_key, sheets_creds_json, spreadsheet_id):
         # Initialize bot
@@ -204,26 +207,39 @@ class FreshdeskKBBot:
                 self._model_loaded = False
         return self._model
 
+    async def check_allowed_author(self, ctx):
+        """Check if the author is allowed to use commands"""
+        return (not ctx.author.bot) or (ctx.author.id == self.TICKET_PROCESSOR_BOT_ID)
+        
     def setup_commands(self):
         @self.bot.event
         async def on_ready():
             print(f'{self.bot.user} has connected to Discord!')
             try:
-                await self.load_kb_articles()  # Load articles
+                await self.load_kb_articles()
                 print('Bot is ready to answer questions! Knowledge base loaded.')
             except Exception as e:
                 print(f'Error loading articles: {str(e)}')
 
         @self.bot.event
         async def on_message(message):
-            # Check if message is from Ticket Processing bot or a regular user
-            TICKET_PROCESSOR_BOT_ID = 1325036182496874538
+            # Ignore own messages
+            if message.author == self.bot.user:
+                return
 
-            if not message.author.bot or message.author.id == TICKET_PROCESSOR_BOT_ID:
-                await self.bot.process_commands(message)
+            # Process messages from regular users and the Ticket Processor bot
+            if not message.author.bot or message.author.id == self.TICKET_PROCESSOR_BOT_ID:
+                try:
+                    print(f"Processing message from {message.author.name} (ID: {message.author.id})")
+                    print(f"Message content: {message.content}")
+                    await self.bot.process_commands(message)
+                except Exception as e:
+                    print(f"Error processing message: {str(e)}")
 
         @self.bot.command(name='check_article')  # Using self.bot consistently
         async def check_article(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
             async with ctx.typing():
                 await ctx.send("Checking target article directly... Please check the console output.")
                 await self.check_single_article()
@@ -231,10 +247,14 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='test')  # Fixed from @bot to @self.bot
         async def test(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
             await ctx.send('Bot is working!')
 
         @self.bot.command(name='diagnose_kb')
         async def diagnose_kb(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
             async with ctx.typing():
                 await ctx.send("Running knowledge base diagnostic... Please check the console output.")
                 await self.diagnose_kb_content()
@@ -288,12 +308,11 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='ask')
         async def ask(ctx, *, question):
-            # Check if the message is from the Ticket Processing bot (replace with your bot's ID)
-            TICKET_PROCESSOR_BOT_ID = 1325036182496874538
+            if not await self.check_allowed_author(ctx):  # Fixed: added self.
+                return
 
-            # Allow commands from either users or the specific bot
-            if not ctx.author.bot or ctx.author.id == TICKET_PROCESSOR_BOT_ID:
-                async with ctx.typing():
+            async with ctx.typing():
+                try:
                     response = await self.get_gpt_answer(question)
                     self.sheets_logger.log_interaction(
                         question=question,
@@ -305,9 +324,16 @@ class FreshdeskKBBot:
                         f"Question: {question}\n\n{response}",
                         view=view
                     )
+                except Exception as e:
+                    error_msg = f"Error processing question: {str(e)}"
+                    print(error_msg)
+                    await ctx.send("Sorry, I encountered an error while processing your question. Please try again.")
 
         @self.bot.command(name='help')
         async def help_command(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
+                
             help_text = (
                 "**Available Commands:**\n"
                 "`!ask <your question>` - Ask me anything about our knowledge base\n"
@@ -333,11 +359,15 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='diagnose')
         async def diagnose(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
             await self.diagnose_command(ctx)
 
         # Add the new visibility command here
         @self.bot.command(name='visibility')
         async def check_visibility(ctx, folder_id: str):
+            if not await self.check_allowed_author(ctx):
+                return
             """Check and update folder visibility"""
             async with ctx.typing():
                 await ctx.send(f"Checking visibility for folder {folder_id}...")
@@ -346,6 +376,9 @@ class FreshdeskKBBot:
 
         @self.bot.command(name='refresh')
         async def refresh(ctx):
+            if not await self.check_allowed_author(ctx):
+                return
+                
             """Manual refresh command to reload all articles"""
             try:
                 async with ctx.typing():
